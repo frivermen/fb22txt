@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 import sys
 import xml.sax
@@ -8,24 +8,55 @@ BODY = ("http://www.gribuser.ru/xml/fictionbook/2.0", "body")
 class FB2Handler(xml.sax.ContentHandler):
     def __init__(self):
         self.in_body = False
+        self.buffer = []
+        self.last_was_newline = False
+    
     def startElementNS(self, name, qname, attrs):
         if name == BODY:
             self.in_body = True
+    
     def endElementNS(self, name, qname):
         if name == BODY:
             self.in_body = False
+            self._flush_buffer()
+    
     def characters(self, content):
         if self.in_body:
-            sys.stdout.write(content.encode('UTF-8'))
+            self.buffer.append(content)
+    
+    def _flush_buffer(self):
+        if not self.buffer:
+            return
+        
+        # Объединяем весь текст из body
+        text = ''.join(self.buffer)
+        self.buffer = []
+        
+        # Обрабатываем строки
+        lines = text.split('\n')
+        non_empty_lines = []
+        
+        for line in lines:
+            # Удаляем пробелы и табуляции в начале и конце
+            stripped = line.strip()
+            # Пропускаем пустые строки
+            if stripped:
+                non_empty_lines.append(stripped)
+        
+        # Выводим непустые строки
+        if non_empty_lines:
+            result = '\n'.join(non_empty_lines) + '\n'
+            sys.stdout.buffer.write(result.encode('utf-8'))
 
 def main():
     try:
         parser = xml.sax.make_parser()
-        parser.setContentHandler(FB2Handler())
+        handler = FB2Handler()
+        parser.setContentHandler(handler)
         parser.setFeature(xml.sax.handler.feature_namespaces, True)
-        parser.parse(sys.stdin)
-    except xml.sax.SAXParseException, e:
-        sys.stderr.write('Unable to parse FB2 document: ' + str(e))
+        parser.parse(sys.stdin.buffer)
+    except xml.sax.SAXParseException as e:
+        sys.stderr.write('Unable to parse FB2 document: ' + str(e) + '\n')
         sys.exit(1)
 
 if __name__ == '__main__':
@@ -33,4 +64,3 @@ if __name__ == '__main__':
         sys.stderr.write('Usage: fb22txt < fb2file > txtfile\n')
         sys.exit(2)
     main()
-
